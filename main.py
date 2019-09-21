@@ -1,6 +1,11 @@
 import requests
 from bs4 import BeautifulSoup
 import re
+from queue import PriorityQueue
+import json
+from collections import deque
+import time
+from selenium import webdriver
 
 # information['description'] = description
 # information['img_url'] = img_url
@@ -8,7 +13,23 @@ import re
 # information['position'] = position
 # information['sendtime'] = sendtime
 # information['money'] = money
+trans = {'驋':'0','龒':'1','閏':'2','鑶':'3', '餼':'4','麣':'5','龤':'6','鸺':'7','龥':'8','齤':'9'}
+pageNumber = 0
+q = PriorityQueue()
+dq = deque()
+MAXCOUNT = 10000
+visit = {}
+class INFO(object):
+    def __init__(self,priority,information):
+        self.priority = priority
+        self.information = information
 
+    def __lt__(self,other):
+        return self.priority < other.priority
+
+    def __str__(self):
+        return json.dumps(self.information,ensure_ascii=False)
+        #return '(' + str(self.priority) + '\'' + json.dumps(self.information) + '\')'
 
 
 def transform(string):
@@ -22,6 +43,18 @@ def transform(string):
     #print(string)
     return string
 
+def clear_information(q,dq):
+    if q.qsize() < MAXCOUNT:
+        return q
+    else:
+        while not q.empty():
+            dq.append(q.get())
+        while dq.count() > MAXCOUNT:
+            dq.pop()
+        while not dq.empty():
+            q.put(dq.popleft())
+        return q
+    return q
 
 def standard_data(information):
     information['description'] = transform(information['description'])
@@ -40,12 +73,12 @@ def standard_data(information):
     information['money'] = transform(information['money'])
     return information
 
-trans = {'麣':'0','龒':'1','餼':'2','龤':'3', '驋':'4','鑶':'5','閏':'6','龥':'7','鸺':'8','齤':'9'}
-pageNumber = 0
+
 
 #print(response.text)
 def info_download():
-    for pageNumber in range(0,71):
+    for pageNumber in range(0,2):
+        time.sleep(2)
         print(pageNumber)
         response = requests.get('https://sz.58.com/chuzu/pn' + str(pageNumber) + '/?PGTID=0d3090a7-0000-457b-6547-0b5d33338a1a&ClickID=2')
         soup = BeautifulSoup(response.text, 'lxml')
@@ -57,6 +90,7 @@ def info_download():
             position = ''
             sendtime = ''
             money = ''
+            href = ''
             contents = li.children
             #print(type(contents))
             i = 0
@@ -65,8 +99,9 @@ def info_download():
                     continue
                 if i == 0:
                     #print(tag)
-                    img_url = tag.a.img['src']
-                    print(img_url)
+                    img_url = tag.a.img['lazy_src']
+                    href = tag.a['href']
+                    #print(img_url)
                 if i == 1:
                     tagchildren = tag.children
                     j = 0
@@ -126,14 +161,36 @@ def info_download():
                 #print(temp.replace('\n',''))
                 #print(int(temp))
             information['money'] = money
+            information['href'] = href
             information = standard_data(information)
-            print(information)
+            #print(information)
 
-
+            info = INFO(information['time'],information)
+            if href not in visit.keys():
+                q.put(info)
+                visit[href] = True
 
 
 if __name__ == '__main__':
-    info_download()
+
+    #print(visit['1'])
+    while True:
+        info_download()
+        clear_information(q,dq)
+        temp = PriorityQueue()
+        while not q.empty():
+            t = q.get()
+            print(t['href'])
+            with open('E:/58House/information.txt','w+') as f:
+                f.write(t['href'])
+            #driver = webdriver.Firefox()
+            #driver.get(t['href'])
+            #temp.put(t)
+            #time.sleep(60)
+        while not temp.empty():
+            q.put(temp.get())
+        time.sleep(60)
+
 #print(uls)
 
 #def getInfo(soup):
